@@ -1,0 +1,4 @@
+node_modules/
+*.position.json
+test-position.json
+binlog-position.json

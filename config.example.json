@@ -1,0 +1,37 @@
+{
+  "source": {
+    "host": "192.168.1.100",
+    "port": 3306,
+    "user": "root",
+    "password": "source_password"
+  },
+  "target": {
+    "host": "192.168.1.101",
+    "port": 3306,
+    "user": "root",
+    "password": "target_password"
+  },
+  "mode": "full+incremental",
+  "syncObjects": {
+    "databases": ["mydb1", "mydb2"],
+    "tables": [
+      { "database": "mydb1", "table": "users" },
+      { "database": "mydb1", "table": "orders" }
+    ],
+    "excludeTables": [
+      { "database": "mydb1", "table": "temp_data" }
+    ]
+  },
+  "fullSync": {
+    "enabled": true,
+    "workerCount": 4,
+    "batchSize": 1000,
+    "batchQueueSize": 10
+  },
+  "incrementalSync": {
+    "enabled": true,
+    "workerCount": 2,
+    "positionFile": "./binlog-position.json",
+    "serverId": 10001
+  }
+}

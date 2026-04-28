@@ -1,0 +1,24 @@
+{
+  "name": "mysql-sync",
+  "version": "1.0.0",
+  "description": "MySQL 数据传输工具 — 全量同步 + Binlog 增量同步",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mysql-sync": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "dependencies": {
+    "mysql2": "^3.11.0",
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0",
+    "tsx": "^4.16.0"
+  }
+}
