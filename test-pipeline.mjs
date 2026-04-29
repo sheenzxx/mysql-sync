@@ -1,13 +1,24 @@
 // Test the full pipeline: full sync + incremental sync with live changes
+// Set env vars: SOURCE_HOST, SOURCE_PORT, SOURCE_USER, SOURCE_PASSWORD,
+//               TARGET_HOST, TARGET_PORT, TARGET_USER, TARGET_PASSWORD
 import { spawn } from 'child_process';
 import mysql from 'mysql2/promise';
 
+const SRC_HOST = process.env.SOURCE_HOST || '127.0.0.1';
+const SRC_PORT = process.env.SOURCE_PORT || '3306';
+const SRC_USER = process.env.SOURCE_USER || 'root';
+const SRC_PASS = process.env.SOURCE_PASSWORD || '';
+const TGT_HOST = process.env.TARGET_HOST || '127.0.0.1';
+const TGT_PORT = process.env.TARGET_PORT || '3307';
+const TGT_USER = process.env.TARGET_USER || 'root';
+const TGT_PASS = process.env.TARGET_PASSWORD || '';
+
 const syncProcess = spawn('node', [
   'dist/index.js', 'sync',
-  '--source-host', '127.0.0.1', '--source-port', '3306',
-  '--source-user', 'dba', '--source-password', 'dba',
-  '--target-host', 'test-pub-rm.pc.com.cn', '--target-port', '3307',
-  '--target-user', 'nagios', '--target-password', 'supportdb',
+  '--source-host', SRC_HOST, '--source-port', SRC_PORT,
+  '--source-user', SRC_USER, '--source-password', SRC_PASS,
+  '--target-host', TGT_HOST, '--target-port', TGT_PORT,
+  '--target-user', TGT_USER, '--target-password', TGT_PASS,
   '--databases', 'mysql_sync_src',
   '--mode', 'full+incremental',
   '--full-sync-workers', '2',
@@ -27,7 +38,7 @@ console.log('\n=== Full sync should be done. Now inserting test changes... ===\n
 
 // Connect to source and make changes
 const conn = await mysql.createConnection({
-  host: '127.0.0.1', port: 3306, user: 'dba', password: 'dba',
+  host: SRC_HOST, port: parseInt(SRC_PORT), user: SRC_USER, password: SRC_PASS,
 });
 
 // Make some test changes
@@ -43,7 +54,7 @@ await new Promise(r => setTimeout(r, 8000));
 
 // Verify target has the changes
 const targetConn = await mysql.createConnection({
-  host: 'test-pub-rm.pc.com.cn', port: 3307, user: 'nagios', password: 'supportdb',
+  host: TGT_HOST, port: parseInt(TGT_PORT), user: TGT_USER, password: TGT_PASS,
 });
 
 const [rows] = await targetConn.query("SELECT * FROM mysql_sync_src.bt2 ORDER BY id");

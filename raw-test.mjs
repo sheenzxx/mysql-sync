@@ -1,6 +1,12 @@
 // Raw socket test: dump raw bytes from MySQL COM_BINLOG_DUMP
+// Set env vars: SOURCE_HOST, SOURCE_PORT, SOURCE_USER, SOURCE_PASSWORD
 const net = require('net');
 const crypto = require('crypto');
+
+const HOST = process.env.SOURCE_HOST || '127.0.0.1';
+const PORT = parseInt(process.env.SOURCE_PORT || '3306');
+const USER = process.env.SOURCE_USER || 'root';
+const PASSWORD = process.env.SOURCE_PASSWORD || '';
 
 function sha1(data) { return crypto.createHash('sha1').update(data).digest(); }
 
@@ -52,7 +58,7 @@ function writePacket(sock, data, seq) {
 }
 
 async function main() {
-  const sock = net.createConnection({ host: '127.0.0.1', port: 3306 });
+  const sock = net.createConnection({ host: HOST, port: PORT });
 
   await new Promise(resolve => sock.on('connect', resolve));
   console.log('Connected');
@@ -76,7 +82,7 @@ async function main() {
 
   // Build handshake response
   const clientFlags = (1<<9) | (1<<15) | (1<<19) | (1<<0) | (1<<13) | (1<<3) | (1<<17);
-  const pwHash = sha256Hash(authPluginData, 'dba');
+  const pwHash = sha256Hash(authPluginData, PASSWORD);
 
   const payload = Buffer.alloc(200);
   let p = 0;
@@ -84,7 +90,7 @@ async function main() {
   payload.writeUInt32LE(16777215, p); p += 4;
   payload[p] = 45; p += 1;
   p += 23;
-  payload.write('dba', p, 'ascii'); p += 3;
+  payload.write(USER, p, 'ascii'); p += USER.length;
   payload[p] = 0; p += 1;
   payload[p] = 20; p += 1;
   pwHash.copy(payload, p); p += 20;
@@ -139,9 +145,7 @@ async function main() {
   console.log('Sent COM_BINLOG_DUMP', filename, pos);
 
   // Now read raw data after the OK/EOF response
-  // Let's accumulate all data and dump it
   let rawData = Buffer.alloc(0);
-  let okPacketFound = false;
 
   sock.on('data', (data) => {
     rawData = Buffer.concat([rawData, data]);

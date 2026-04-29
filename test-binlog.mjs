@@ -1,11 +1,12 @@
 // Quick test: connect to binlog from position 4
+// Set env vars: SOURCE_HOST, SOURCE_PORT, SOURCE_USER, SOURCE_PASSWORD
 import { BinlogClient } from './dist/binlog-client.js';
 
 const config = {
-  host: '127.0.0.1',
-  port: 3306,
-  user: 'dba',
-  password: 'dba',
+  host: process.env.SOURCE_HOST || '127.0.0.1',
+  port: parseInt(process.env.SOURCE_PORT || '3306'),
+  user: process.env.SOURCE_USER || 'root',
+  password: process.env.SOURCE_PASSWORD || '',
 };
 
 let eventCount = 0;

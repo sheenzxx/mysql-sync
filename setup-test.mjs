@@ -1,12 +1,12 @@
 // Setup: create a clean test table with simple types
-// No DATETIME2, no nullable columns — just INT and VARCHAR
+// Set env vars: SOURCE_HOST, SOURCE_PORT, SOURCE_USER, SOURCE_PASSWORD
 import mysql from 'mysql2/promise';
 
 const conn = await mysql.createConnection({
-  host: '127.0.0.1',
-  port: 3306,
-  user: 'dba',
-  password: 'dba',
+  host: process.env.SOURCE_HOST || '127.0.0.1',
+  port: parseInt(process.env.SOURCE_PORT || '3306'),
+  user: process.env.SOURCE_USER || 'root',
+  password: process.env.SOURCE_PASSWORD || '',
 });
 
 // Drop and recreate test table

@@ -1,5 +1,20 @@
 // Quick check: connectivity and database list
+// Set env vars: SOURCE_HOST, SOURCE_PORT, SOURCE_USER, SOURCE_PASSWORD,
+//               TARGET_HOST, TARGET_PORT, TARGET_USER, TARGET_PASSWORD
 import mysql from 'mysql2/promise';
+
+const SRC = {
+  host: process.env.SOURCE_HOST || '127.0.0.1',
+  port: parseInt(process.env.SOURCE_PORT || '3306'),
+  user: process.env.SOURCE_USER || 'root',
+  password: process.env.SOURCE_PASSWORD || '',
+};
+const TGT = {
+  host: process.env.TARGET_HOST || '127.0.0.1',
+  port: parseInt(process.env.TARGET_PORT || '3307'),
+  user: process.env.TARGET_USER || 'root',
+  password: process.env.TARGET_PASSWORD || '',
+};
 
 async function check(label, config) {
   try {
@@ -14,6 +29,6 @@ async function check(label, config) {
   }
 }
 
-const ok1 = await check('SOURCE', { host: '127.0.0.1', port: 3306, user: 'dba', password: 'dba' });
-const ok2 = await check('TARGET', { host: 'test-pub-rm.pc.com.cn', port: 3307, user: 'nagios', password: 'supportdb' });
+const ok1 = await check('SOURCE', SRC);
+const ok2 = await check('TARGET', TGT);
 console.log(ok1 && ok2 ? '\nBoth OK' : '\nSOME FAILED');
