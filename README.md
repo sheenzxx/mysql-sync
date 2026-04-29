@@ -1,1 +1,1 @@
-this program write by claude-code + deepseed v4
+this program coding by claude-code + deepseed v4
