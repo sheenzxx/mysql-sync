@@ -25,6 +25,8 @@ export declare class IncrementalReplayer {
     private buildDelete;
     /** Column info cache */
     private columnCache;
+    /** Pre-warm the column cache for a table (avoids slow first query during replay) */
+    warmCache(database: string, table: string): Promise<void>;
     private getTableColumns;
 }
 //# sourceMappingURL=incr-replayer.d.ts.map

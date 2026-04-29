@@ -155,6 +155,10 @@ export class IncrementalReplayer {
     }
     /** Column info cache */
     columnCache = new Map();
+    /** Pre-warm the column cache for a table (avoids slow first query during replay) */
+    async warmCache(database, table) {
+        await this.getTableColumns(database, table);
+    }
     async getTableColumns(database, table) {
         const key = `${database}.${table}`;
         if (this.columnCache.has(key)) {

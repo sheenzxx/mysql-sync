@@ -31,15 +31,15 @@ const conn = await mysql.createConnection({
 });
 
 // Make some test changes
-await conn.execute("INSERT INTO mysql_sync_src.bt2 (name, email) VALUES ('incr_test_1', 'incr1@test.com')");
-await conn.execute("INSERT INTO mysql_sync_src.bt2 (name, email) VALUES ('incr_test_2', 'incr2@test.com')");
+await conn.execute("INSERT INTO mysql_sync_src.bt2 (name, age) VALUES ('incr_test_1', 100)");
+await conn.execute("INSERT INTO mysql_sync_src.bt2 (name, age) VALUES ('incr_test_2', 200)");
 await conn.execute("UPDATE mysql_sync_src.bt2 SET name = 'incr_test_1_updated' WHERE name = 'incr_test_1'");
 await conn.execute("DELETE FROM mysql_sync_src.bt2 WHERE name = 'incr_test_2'");
 
 console.log('Changes made: 2 INSERTs, 1 UPDATE, 1 DELETE');
 
 // Wait for sync to process
-await new Promise(r => setTimeout(r, 5000));
+await new Promise(r => setTimeout(r, 8000));
 
 // Verify target has the changes
 const targetConn = await mysql.createConnection({
@@ -49,7 +49,7 @@ const targetConn = await mysql.createConnection({
 const [rows] = await targetConn.query("SELECT * FROM mysql_sync_src.bt2 ORDER BY id");
 console.log('\nTarget bt2 table:');
 for (const r of rows) {
-  console.log(`  id=${r.id}  name=${r.name}  email=${r.email}`);
+  console.log(`  id=${r.id}  name=${r.name}  age=${r.age}`);
 }
 
 // Check the sync stats from the output

@@ -195,6 +195,11 @@ export class IncrementalReplayer {
   /** Column info cache */
   private columnCache = new Map<string, { name: string; type: string; isPrimary: boolean }[]>();
 
+  /** Pre-warm the column cache for a table (avoids slow first query during replay) */
+  async warmCache(database: string, table: string): Promise<void> {
+    await this.getTableColumns(database, table);
+  }
+
   private async getTableColumns(database: string, table: string): Promise<{ name: string; type: string; isPrimary: boolean }[]> {
     const key = `${database}.${table}`;
     if (this.columnCache.has(key)) {

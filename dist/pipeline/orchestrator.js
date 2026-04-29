@@ -81,7 +81,7 @@ export class SyncOrchestrator {
             }
             // Start incremental sync
             if (this.config.incrementalSync.enabled && this.running) {
-                await this.startIncrementalSync();
+                await this.startIncrementalSync(syncObjects);
             }
         }
         catch (err) {
@@ -181,7 +181,7 @@ export class SyncOrchestrator {
         logger.info(`  Rows: ${this.stats.fullSync.rowsWritten} written`);
     }
     /** Start incremental binlog sync */
-    async startIncrementalSync() {
+    async startIncrementalSync(syncObjects) {
         // Check binlog configuration
         const binlogEnabled = await checkBinlogEnabled(this.sourcePool);
         if (!binlogEnabled) {
@@ -195,6 +195,12 @@ export class SyncOrchestrator {
         }
         logger.info('=== Starting incremental sync (binlog) ===');
         this.stats.incrementalSync.startTime = Date.now();
+        // Pre-warm column cache for all known tables to avoid slow
+        // information_schema queries during concurrent event replay
+        for (const obj of syncObjects) {
+            await this.incrReplayer.warmCache(obj.database, obj.table);
+        }
+        logger.info(`Column cache warmed for ${syncObjects.length} tables`);
         // Get starting position
         let startPos = await this.positionManager.load();
         if (!startPos) {
@@ -214,8 +220,11 @@ export class SyncOrchestrator {
             logger.info(`Resuming binlog from position: ${startPos.filename}:${startPos.position}`);
         }
         this.incrementalActive = true;
-        // Set up incremental replayer worker pool
-        const incrPool = new WorkerPool(this.config.incrementalSync.workerCount, async (change) => {
+        // Per-table worker pools ensure events for the same table are
+        // processed sequentially, preventing race conditions where a
+        // DELETE runs before its corresponding INSERT completes.
+        const tablePools = new Map();
+        const processor = async (change) => {
             try {
                 await this.incrReplayer.apply(change);
                 switch (change.type) {
@@ -234,10 +243,19 @@ export class SyncOrchestrator {
                 this.stats.incrementalSync.errors++;
                 logger.error(`Failed to apply ${change.type} on ${change.database}.${change.table}:`, err);
             }
-        });
-        incrPool.on('error', (err) => {
-            logger.error('Incremental worker error:', err);
-        });
+        };
+        const getTablePool = (database, table) => {
+            const key = `${database}.${table}`;
+            let pool = tablePools.get(key);
+            if (!pool) {
+                pool = new WorkerPool(1, processor);
+                pool.on('error', (err) => {
+                    logger.error(`Incremental worker error (${key}):`, err);
+                });
+                tablePools.set(key, pool);
+            }
+            return pool;
+        };
         // Start periodic sync object check
         this.syncManager.on('object-added', (obj) => {
             logger.info(`New table detected, starting full sync: ${obj.database}.${obj.table}`);
@@ -252,7 +270,7 @@ export class SyncOrchestrator {
         this.incrCollector.on('change', (change) => {
             if (!this.incrementalActive)
                 return;
-            incrPool.push(change);
+            getTablePool(change.database, change.table).push(change);
         });
         this.incrCollector.on('position', (pos) => {
             this.positionManager.save(pos).catch(err => {
