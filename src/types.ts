@@ -28,12 +28,18 @@ export type RowData = Record<string, unknown>;
 
 /** Row change event from binlog */
 export interface RowChange {
-  type: 'insert' | 'update' | 'delete';
+  type: 'insert' | 'update' | 'delete' | 'ddl';
   database: string;
   table: string;
   before?: RowData;   // for update/delete
   after?: RowData;    // for insert/update
   timestamp: number;
+  /** DDL metadata (populated when type === 'ddl') */
+  ddl?: {
+    ddlType: string;           // normalized: 'CREATE TABLE', 'ALTER TABLE', etc.
+    sql: string;               // raw SQL from binlog
+    affectedTables?: string[]; // for RENAME: both old and new table names
+  };
 }
 
 /** Binlog position */
@@ -73,6 +79,7 @@ export interface SyncStats {
     inserts: number;
     updates: number;
     deletes: number;
+    ddl: number;
     errors: number;
     startTime: number;
   };

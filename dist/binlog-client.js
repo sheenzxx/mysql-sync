@@ -313,6 +313,9 @@ export class BinlogClient {
             case EventType.GTID_EVENT:
                 // GTID info — we don't need it for basic sync
                 break;
+            case EventType.QUERY_EVENT:
+                this.processQueryEvent(buf);
+                break;
             default:
                 // Ignore other events
                 break;
@@ -481,6 +484,51 @@ export class BinlogClient {
             if (result && typeof result.then === 'function') {
                 result.catch((err) => logger.error('Error handling row change:', err));
             }
+        }
+    }
+    processQueryEvent(buf) {
+        // QUERY_EVENT payload (after 19-byte event header):
+        //   4 bytes: slave_proxy_id
+        //   4 bytes: exec_time
+        //   1 byte:  schema_length (db name, not including null terminator)
+        //   2 bytes: error_code
+        //   2 bytes: status_vars_length
+        //   N bytes: status_vars
+        //   M bytes: database name (schema_length bytes)
+        //   1 byte:  null terminator
+        //   rest:    SQL query text
+        let off = 0;
+        off += 4; // slave_proxy_id
+        off += 4; // exec_time
+        const schemaLen = buf.readUInt8(off);
+        off += 1;
+        off += 2; // error_code
+        const statusVarsLen = leReadUint16(buf, off);
+        off += 2;
+        off += statusVarsLen; // skip status vars
+        const database = buf.toString('utf8', off, off + schemaLen);
+        off += schemaLen + 1; // +1 for null terminator
+        const sql = buf.toString('utf8', off);
+        if (!sql)
+            return;
+        const classification = classifyDdl(sql);
+        if (!classification)
+            return; // not a DDL statement
+        logger.info(`DDL detected: ${classification.ddlType} on ${database}.${classification.table ?? '(global)'}`);
+        const change = {
+            type: 'ddl',
+            database,
+            table: classification.table ?? '',
+            timestamp: Date.now(),
+            ddl: {
+                ddlType: classification.ddlType,
+                sql,
+                affectedTables: classification.affectedTables,
+            },
+        };
+        const result = this.onRowChange(change);
+        if (result && typeof result.then === 'function') {
+            result.catch((err) => logger.error('Error handling DDL change:', err));
         }
     }
     readRow(buf, off, map, colIndexes) {
@@ -1007,5 +1055,96 @@ function blobLenSize(colType) {
         case 251 /* ColType.LONG_BLOB */: return 4;
         default: return 2;
     }
+}
+/** Extract an identifier (backtick-quoted or unquoted) from SQL at position */
+function parseIdentifier(sql, pos) {
+    if (pos >= sql.length)
+        return { name: '', next: pos };
+    if (sql[pos] === '`') {
+        const end = sql.indexOf('`', pos + 1);
+        if (end === -1)
+            return { name: '', next: sql.length };
+        return { name: sql.slice(pos + 1, end), next: end + 1 };
+    }
+    const match = sql.slice(pos).match(/^[A-Za-z0-9_]+/);
+    if (!match)
+        return { name: '', next: pos };
+    return { name: match[0], next: pos + match[0].length };
+}
+/** Classify a SQL statement as DDL and extract table info */
+function classifyDdl(sql) {
+    // Normalize: collapse whitespace, trim
+    const upper = sql.trim().replace(/\s+/g, ' ').toUpperCase();
+    // CREATE TABLE / ALTER TABLE / DROP TABLE / TRUNCATE TABLE
+    const ctMatch = sql.trim().match(/^CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/i);
+    if (ctMatch) {
+        const table = ctMatch[2] || ctMatch[1];
+        return { ddlType: 'CREATE TABLE', table };
+    }
+    const atMatch = sql.trim().match(/^ALTER\s+TABLE\s+(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/i);
+    if (atMatch) {
+        const table = atMatch[2] || atMatch[1];
+        return { ddlType: 'ALTER TABLE', table };
+    }
+    const dtMatch = sql.trim().match(/^DROP\s+(?:TEMPORARY\s+)?TABLE\s+(?:IF\s+EXISTS\s+)?(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/i);
+    if (dtMatch) {
+        const table = dtMatch[2] || dtMatch[1];
+        return { ddlType: 'DROP TABLE', table };
+    }
+    const trMatch = sql.trim().match(/^TRUNCATE\s+(?:TABLE\s+)?(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/i);
+    if (trMatch) {
+        const table = trMatch[2] || trMatch[1];
+        return { ddlType: 'TRUNCATE TABLE', table };
+    }
+    // RENAME TABLE — parse old and new table names
+    const rnMatch = sql.trim().match(/^RENAME\s+TABLE\s+/i);
+    if (rnMatch) {
+        const tableNames = [];
+        const rest = sql.trim().slice(rnMatch[0].length);
+        // Match pairs: `a`.`b` TO `c`.`d` or a TO c
+        const pairRegex = /(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?\s+TO\s+(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/gi;
+        let pm;
+        while ((pm = pairRegex.exec(rest)) !== null) {
+            const oldTable = pm[2] || pm[1];
+            const newTable = pm[4] || pm[3];
+            if (oldTable)
+                tableNames.push(oldTable);
+            if (newTable)
+                tableNames.push(newTable);
+        }
+        return {
+            ddlType: 'RENAME TABLE',
+            table: tableNames[0],
+            affectedTables: tableNames,
+        };
+    }
+    // CREATE DATABASE / DROP DATABASE
+    if (/^CREATE\s+DATABASE/i.test(sql))
+        return { ddlType: 'CREATE DATABASE' };
+    if (/^DROP\s+DATABASE/i.test(sql))
+        return { ddlType: 'DROP DATABASE' };
+    // CREATE INDEX / DROP INDEX
+    const ciMatch = sql.trim().match(/^CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:`?)(\w+)(?:`?)\s+ON\s+(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/i);
+    if (ciMatch) {
+        const table = ciMatch[3] || ciMatch[2];
+        return { ddlType: 'CREATE INDEX', table };
+    }
+    const diMatch = sql.trim().match(/^DROP\s+INDEX\s+(?:`?)(\w+)(?:`?)\s+ON\s+(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/i);
+    if (diMatch) {
+        const table = diMatch[3] || diMatch[2];
+        return { ddlType: 'DROP INDEX', table };
+    }
+    // CREATE VIEW / DROP VIEW
+    const cvMatch = sql.trim().match(/^CREATE\s+(?:OR\s+REPLACE\s+)?(?:ALGORITHM\s*=\s*\S+\s+)?VIEW\s+(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/i);
+    if (cvMatch) {
+        const table = cvMatch[2] || cvMatch[1];
+        return { ddlType: 'CREATE VIEW', table };
+    }
+    const dvMatch = sql.trim().match(/^DROP\s+VIEW\s+(?:IF\s+EXISTS\s+)?(?:`?)(\w+)(?:`?)(?:\.`?(\w+)(?:`?))?/i);
+    if (dvMatch) {
+        const table = dvMatch[2] || dvMatch[1];
+        return { ddlType: 'DROP VIEW', table };
+    }
+    return null; // not a DDL statement
 }
 //# sourceMappingURL=binlog-client.js.map

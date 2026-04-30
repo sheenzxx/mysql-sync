@@ -24,6 +24,9 @@ export class IncrementalReplayer {
             case 'delete':
                 await this.applyDelete(change);
                 break;
+            case 'ddl':
+                await this.applyDdl(change);
+                break;
         }
     }
     /**
@@ -56,6 +59,9 @@ export class IncrementalReplayer {
                         await this.buildDelete(conn, change.database, change.table, beforeMapped, pkColumns);
                         break;
                     }
+                    case 'ddl':
+                        // DDL cannot be batched — rollback and apply individually
+                        throw new Error('DDL cannot be batched');
                 }
             }
             await conn.commit();
@@ -158,6 +164,39 @@ export class IncrementalReplayer {
     /** Pre-warm the column cache for a table (avoids slow first query during replay) */
     async warmCache(database, table) {
         await this.getTableColumns(database, table);
+    }
+    /** Apply a DDL statement to the target database */
+    async applyDdl(change) {
+        const ddl = change.ddl;
+        if (!ddl)
+            return;
+        logger.info(`Applying DDL on target: ${ddl.ddlType} [${change.database}.${change.table || '(global)'}]`);
+        // Use a dedicated connection to ensure correct database context
+        const conn = await this.pool.getConnection();
+        try {
+            if (change.database) {
+                await conn.query(`USE \`${change.database}\``);
+            }
+            await conn.query(ddl.sql);
+            logger.info(`DDL applied successfully: ${ddl.ddlType}`);
+        }
+        finally {
+            conn.release();
+        }
+        // Invalidate column cache for affected tables
+        const tables = ddl.affectedTables && ddl.affectedTables.length > 0
+            ? ddl.affectedTables
+            : change.table ? [change.table] : [];
+        for (const tbl of tables) {
+            if (tbl)
+                this.invalidateCache(change.database, tbl);
+        }
+    }
+    /** Invalidate column cache for a table (call after DDL that modifies schema) */
+    invalidateCache(database, table) {
+        const key = `${database}.${table}`;
+        this.columnCache.delete(key);
+        logger.debug(`Column cache invalidated for ${key}`);
     }
     async getTableColumns(database, table) {
         const key = `${database}.${table}`;

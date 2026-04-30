@@ -233,6 +233,7 @@ function getHtml(): string {
       <div class="stat-item"><div class="stat-value" id="inc-inserts">0</div><div class="stat-label" style="color:#3fb950">Inserts</div></div>
       <div class="stat-item"><div class="stat-value" id="inc-updates">0</div><div class="stat-label" style="color:#d2991d">Updates</div></div>
       <div class="stat-item"><div class="stat-value" id="inc-deletes">0</div><div class="stat-label" style="color:#f85149">Deletes</div></div>
+      <div class="stat-item"><div class="stat-value" id="inc-ddl">0</div><div class="stat-label" style="color:#58a6ff">DDL</div></div>
       <div class="stat-item"><div class="stat-value" id="inc-errors">0</div><div class="stat-label" style="color:#f85149">Errors</div></div>
       <div class="stat-item"><div class="stat-value" id="inc-elapsed">0s</div><div class="stat-label">Elapsed</div></div>
     </div>
@@ -307,6 +308,7 @@ function getHtml(): string {
       document.getElementById('inc-inserts').textContent = stats.incrementalSync.inserts.toLocaleString();
       document.getElementById('inc-updates').textContent = stats.incrementalSync.updates.toLocaleString();
       document.getElementById('inc-deletes').textContent = stats.incrementalSync.deletes.toLocaleString();
+      document.getElementById('inc-ddl').textContent = (stats.incrementalSync.ddl || 0).toLocaleString();
       document.getElementById('inc-errors').textContent = stats.incrementalSync.errors.toLocaleString();
       if (stats.incrementalSync.startTime) {
         var sec2 = Math.floor((Date.now() - stats.incrementalSync.startTime) / 1000);

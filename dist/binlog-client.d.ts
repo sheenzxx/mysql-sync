@@ -33,6 +33,7 @@ export declare class BinlogClient {
     private processRotate;
     private processTableMap;
     private processRowsEvent;
+    private processQueryEvent;
     private readRow;
     private parseColumnValue;
     private performHandshake;

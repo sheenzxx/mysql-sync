@@ -27,6 +27,10 @@ export declare class IncrementalReplayer {
     private columnCache;
     /** Pre-warm the column cache for a table (avoids slow first query during replay) */
     warmCache(database: string, table: string): Promise<void>;
+    /** Apply a DDL statement to the target database */
+    applyDdl(change: RowChange): Promise<void>;
+    /** Invalidate column cache for a table (call after DDL that modifies schema) */
+    invalidateCache(database: string, table: string): void;
     private getTableColumns;
 }
 //# sourceMappingURL=incr-replayer.d.ts.map

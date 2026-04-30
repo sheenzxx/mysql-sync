@@ -33,6 +33,7 @@ export declare class SyncOrchestrator {
             inserts: number;
             updates: number;
             deletes: number;
+            ddl: number;
             errors: number;
             startTime: number;
         };

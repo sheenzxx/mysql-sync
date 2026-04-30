@@ -48,6 +48,7 @@ export class SyncOrchestrator {
       inserts: 0,
       updates: 0,
       deletes: 0,
+      ddl: 0,
       errors: 0,
       startTime: 0,
     },
@@ -271,11 +272,26 @@ export class SyncOrchestrator {
 
     const processor = async (change: RowChange) => {
       try {
+        // For RENAME TABLE, drain the new table's pool before applying
+        // to ensure no pending DML on the new table name
+        if (change.type === 'ddl' && change.ddl?.ddlType === 'RENAME TABLE' && change.ddl?.affectedTables) {
+          const affected = change.ddl.affectedTables;
+          if (affected.length >= 2) {
+            const newTable = affected[affected.length - 1];
+            const newKey = `${change.database}.${newTable}`;
+            const newPool = tablePools.get(newKey);
+            if (newPool) {
+              await newPool.drain();
+            }
+          }
+        }
+
         await this.incrReplayer.apply(change);
         switch (change.type) {
           case 'insert': this.stats.incrementalSync.inserts++; break;
           case 'update': this.stats.incrementalSync.updates++; break;
           case 'delete': this.stats.incrementalSync.deletes++; break;
+          case 'ddl': this.stats.incrementalSync.ddl++; break;
         }
       } catch (err) {
         this.stats.incrementalSync.errors++;
@@ -290,6 +306,21 @@ export class SyncOrchestrator {
         pool = new WorkerPool<RowChange>(1, processor);
         pool.on('error', (err) => {
           logger.error(`Incremental worker error (${key}):`, err);
+        });
+        tablePools.set(key, pool);
+      }
+      return pool;
+    };
+
+    // Global single-worker pool for DDL that doesn't target a specific table
+    // (e.g. CREATE DATABASE, DROP DATABASE)
+    const getGlobalDdlPool = (): WorkerPool<RowChange> => {
+      const key = '__global_ddl__';
+      let pool = tablePools.get(key);
+      if (!pool) {
+        pool = new WorkerPool<RowChange>(1, processor);
+        pool.on('error', (err) => {
+          logger.error('Global DDL worker error:', err);
         });
         tablePools.set(key, pool);
       }
@@ -312,7 +343,12 @@ export class SyncOrchestrator {
 
     this.incrCollector.on('change', (change: RowChange) => {
       if (!this.incrementalActive) return;
-      getTablePool(change.database, change.table).push(change);
+      // Route DDL without a specific table to the global pool
+      if (change.type === 'ddl' && !change.table) {
+        getGlobalDdlPool().push(change);
+      } else {
+        getTablePool(change.database, change.table).push(change);
+      }
     });
 
     this.incrCollector.on('position', (pos: BinlogPosition) => {
@@ -359,7 +395,7 @@ export class SyncOrchestrator {
     logger.info(`Full sync: ${fs.tablesCompleted}/${fs.tablesTotal} tables, ${fs.rowsWritten} rows`);
     if (inc.startTime > 0) {
       const elapsed = ((Date.now() - inc.startTime) / 1000).toFixed(0);
-      logger.info(`Incremental sync: +${inc.inserts} / ~${inc.updates} / -${inc.deletes} (${inc.errors} err, ${elapsed}s)`);
+      logger.info(`Incremental sync: +${inc.inserts} / ~${inc.updates} / -${inc.deletes} / DDL:${inc.ddl} (${inc.errors} err, ${elapsed}s)`);
     }
   }
 }

@@ -24,12 +24,18 @@ export interface SyncObject {
 export type RowData = Record<string, unknown>;
 /** Row change event from binlog */
 export interface RowChange {
-    type: 'insert' | 'update' | 'delete';
+    type: 'insert' | 'update' | 'delete' | 'ddl';
     database: string;
     table: string;
     before?: RowData;
     after?: RowData;
     timestamp: number;
+    /** DDL metadata (populated when type === 'ddl') */
+    ddl?: {
+        ddlType: string;
+        sql: string;
+        affectedTables?: string[];
+    };
 }
 /** Binlog position */
 export interface BinlogPosition {
@@ -65,6 +71,7 @@ export interface SyncStats {
         inserts: number;
         updates: number;
         deletes: number;
+        ddl: number;
         errors: number;
         startTime: number;
     };
