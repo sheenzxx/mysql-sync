@@ -84,7 +84,7 @@ export function buildConfig(cliOptions: Record<string, any>): SyncConfig {
 }
 
 /** Validate and apply defaults */
-function normalizeConfig(config: SyncConfig): SyncConfig {
+export function normalizeConfig(config: SyncConfig): SyncConfig {
   // Apply defaults
   if (!config.mode) config.mode = DEFAULTS.mode as SyncConfig['mode'];
   config.fullSync = { ...DEFAULTS.fullSync, ...config.fullSync } as SyncConfig['fullSync'];

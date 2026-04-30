@@ -36,7 +36,7 @@ export class SyncOrchestrator {
   private running = false;
   private incrementalActive = false;
 
-  private stats = {
+  stats = {
     fullSync: {
       tablesTotal: 0,
       tablesCompleted: 0,

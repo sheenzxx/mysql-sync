@@ -3,6 +3,7 @@ import { program } from 'commander';
 import { buildConfig, loadConfigFile } from './config.js';
 import { SyncOrchestrator } from './pipeline/orchestrator.js';
 import { logger, setLogLevel, LogLevel } from './logger.js';
+import { startUIServer } from './ui/index.js';
 async function main() {
     program
         .name('mysql-sync')
@@ -93,6 +94,20 @@ async function main() {
             logger.error('Fatal error:', err);
             process.exit(1);
         }
+    });
+    program
+        .command('ui')
+        .description('启动 Web UI 管理界面')
+        .option('-p, --port <port>', 'HTTP 服务端口', (v) => parseInt(v), 3000)
+        .action(async (options) => {
+        setLogLevel(LogLevel.INFO);
+        const server = startUIServer(options.port);
+        logger.info(`打开浏览器访问 http://localhost:${options.port}`);
+        await new Promise((resolve) => {
+            const shutdown = () => { server.close(); resolve(); };
+            process.on('SIGINT', shutdown);
+            process.on('SIGTERM', shutdown);
+        });
     });
     await program.parseAsync(process.argv);
 }

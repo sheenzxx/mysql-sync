@@ -1,5 +1,6 @@
 import { Console } from 'node:console';
 import { format } from 'node:util';
+import { EventEmitter } from 'node:events';
 
 export enum LogLevel {
   DEBUG = 0,
@@ -18,6 +19,9 @@ const LEVEL_NAMES: Record<LogLevel, string> = {
 let currentLevel = LogLevel.INFO;
 const isBun = typeof process.versions.bun !== 'undefined';
 
+/** EventEmitter for external log subscribers (e.g. web UI via SSE) */
+export const logEmitter = new EventEmitter();
+
 function timestamp(): string {
   const d = new Date();
   return d.toISOString().replace('T', ' ').slice(0, 23);
@@ -32,6 +36,10 @@ function log(level: LogLevel, args: unknown[]): void {
   const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a, null, 0) : String(a))).join(' ');
   const prefix = `[${timestamp()}] [${LEVEL_NAMES[level]}]`;
   const output = `${prefix} ${msg}`;
+
+  // Emit for external subscribers (non-blocking)
+  logEmitter.emit('log', { level: LEVEL_NAMES[level], message: msg, timestamp: timestamp(), full: output });
+
   if (isBun) {
     // Bun has enhanced console
     if (level >= LogLevel.ERROR) console.error(output);

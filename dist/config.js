@@ -78,7 +78,7 @@ export function buildConfig(cliOptions) {
     return normalizeConfig(config);
 }
 /** Validate and apply defaults */
-function normalizeConfig(config) {
+export function normalizeConfig(config) {
     // Apply defaults
     if (!config.mode)
         config.mode = DEFAULTS.mode;

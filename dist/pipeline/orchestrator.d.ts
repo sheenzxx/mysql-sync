@@ -21,7 +21,22 @@ export declare class SyncOrchestrator {
     private fullSyncTasks;
     private running;
     private incrementalActive;
-    private stats;
+    stats: {
+        fullSync: {
+            tablesTotal: number;
+            tablesCompleted: number;
+            rowsRead: number;
+            rowsWritten: number;
+            startTime: number;
+        };
+        incrementalSync: {
+            inserts: number;
+            updates: number;
+            deletes: number;
+            errors: number;
+            startTime: number;
+        };
+    };
     constructor(config: SyncConfig);
     /** Start the sync pipeline */
     start(): Promise<void>;
